@@ -352,6 +352,16 @@
     font-size: 14px; margin: 10px 0 0; padding-bottom: 3px; border-bottom: 2px solid var(--line);
   }
   .gen-head:first-child { margin-top: 0; }
+  .secret-msg {
+    margin: 4px auto 10px; padding: 12px 14px; border-radius: 14px; max-width: 420px;
+    background: linear-gradient(135deg, #fff6d6, #ffe0b8); border: 2px solid #e6b422;
+    color: #7a4b00; font-weight: bold; font-size: 15px; line-height: 1.6;
+    box-shadow: 0 3px 10px rgba(230,180,34,.25); animation: secretPop .5s ease-out;
+  }
+  .secret-video { position: relative; width: 100%; aspect-ratio: 16 / 9; margin-top: 10px; border-radius: 10px; overflow: hidden; background: #000; }
+  .secret-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .secret-msg small { display: block; font-size: 10px; color: #b58400; letter-spacing: 2px; margin-bottom: 2px; }
+  @keyframes secretPop { 0% { transform: scale(.7); opacity: 0; } 70% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -440,6 +450,7 @@
 <!-- フェーズ3：結果 -->
 <div id="phase3" class="step-container hidden">
   <h2>あんたの神7、できたで！</h2>
+  <div id="secret-msg" class="secret-msg hidden"></div>
   <p class="desc">この画像をそのままXに投稿できるで</p>
 
   <div class="result-img-wrap">
@@ -491,6 +502,38 @@ const STATS = {
   entryRanks: ['entry.496043935', 'entry.129893525', 'entry.874597884', 'entry.1111194283', 'entry.1312571171', 'entry.1002050633', 'entry.875095588'],
   csvUrl: 'https://docs.google.com/spreadsheets/d/1MfOWz7UMugZNpEYRkafsGSVk6Vqo_5hiqotBaO_3dVs/gviz/tq?tqx=out:csv&headers=1',
 };
+
+/* ---------- 隠しメッセージ ----------
+   条件に合う神7ができたとき、結果画面に特別なメッセージを出す。
+   上から順に見て、最初に当てはまった1つだけ表示。
+   type の種類：
+     solo    … 7枠ぜんぶ同じ人（自分で並べるモード）      {name} = その人
+     center  … 1位（センター）が member                    例：{ type:'center', member:'塩月希依音', msg:'…' }
+     exact   … 1〜7位が members と順番まで完全一致
+     set     … members が全員、神7に入っている（順番自由）
+     allGen  … 7人全員が同じ期 gen                         例：{ type:'allGen', gen:'11期', msg:'…' }
+     sameGen … 7人全員が同じ期（どの期でも）              {gen} = その期
+     allGrad … 7人全員が卒業生
+   video: 'YouTubeの動画ID' を付けると、メッセージの下に動画を埋め込んで表示
+*/
+const SECRETS = [
+  { type: 'allGrad', msg: '全員卒業生！ 今のNMBも見てって〜！！', video: 'Wtg2V1E1IT8' },
+  // ↓ 特定メンバーの組み合わせ（人数の多い組み合わせを先に判定）
+  { type: 'set', members: ['坂下真心', '桜田彩叶', '坂田心咲', '龍本弥生'], msg: 'さかさかあやよん！！！！' },
+  { type: 'set', members: ['吉田朱里', '太田夢莉', '渋谷凪咲', '村瀬紗英'], msg: '🩷Quintet🩷' },
+  { type: 'set', members: ['高橋ことね', '三鴨くるみ', '内田愛彩'], msg: 'くることしゃん' },
+  { type: 'set', members: ['桜田彩叶', '龍本弥生', '新澤菜央'], msg: 'カワイイは世界を救う' },
+  { type: 'set', members: ['池帆乃香', '福野杏実', '桜田彩叶'], msg: 'あやほのあみやね〜' },
+  { type: 'set', members: ['和田海佑', '浅尾桃香', '瓶野神音'], msg: 'もみじ🍁' },
+  { type: 'set', members: ['谷口詩乃', '田中れい', '桜井ひまり'], msg: 'おきらくトリオ！！！' },
+  { type: 'set', members: ['桜田彩叶', '龍本弥生'], msg: 'あやよん📻' },
+  { type: 'set', members: ['渋谷凪咲', '薮下柊'], msg: 'なぎっしゅーやね！' },
+  { type: 'set', members: ['高橋ことね', '三鴨くるみ'], msg: 'かものはし' },
+  { type: 'center', member: '菖蒲まりん', msg: '海じゃないよ アクアだよ' },
+  { type: 'solo',    msg: '7人ぜんぶ{name}！？ 愛やね' },
+  { type: 'center',  member: '塩月希依音', msg: '我らがキャプテン！' },
+  { type: 'sameGen', msg: '全員{gen}！ {gen}箱推し界隈' },
+];
 
 const MIN_PRELIM = 7;   // 神7を作るのに必要な最低人数
 const TOP_N = 7;        // 上位何人まで決めるか
@@ -1288,10 +1331,48 @@ function showRanking() {
 }
 
 // send: ソートの結果だけ集計に送る（自分で並べた神7は送らない）
+function findSecret(list) {
+  const names = list.map(m => m.name);
+  const fill = (msg, vars) => msg.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+  for (const s of SECRETS) {
+    let ok = false, vars = { name: names[0], gen: list[0] && list[0].gen };
+    switch (s.type) {
+      case 'solo':    ok = names.length === 7 && names.every(n => n === names[0]); break;
+      case 'center':  ok = names[0] === s.member; break;
+      case 'exact':   ok = (s.members || []).length === 7 && s.members.every((n, i) => names[i] === n); break;
+      case 'set':     ok = (s.members || []).length > 0 && s.members.every(n => names.includes(n)); break;
+      case 'allGen':  ok = list.length === 7 && list.every(m => m.gen === s.gen); vars.gen = s.gen; break;
+      case 'sameGen': ok = list.length === 7 && list.every(m => m.gen === list[0].gen); break;
+      case 'allGrad': ok = list.length === 7 && list.every(m => !m.current); break;
+    }
+    if (ok) return { msg: fill(s.msg, vars), video: s.video };
+  }
+  return null;
+}
+
+function showSecret(list) {
+  const box = document.getElementById('secret-msg');
+  const hit = findSecret(list);
+  box.classList.toggle('hidden', !hit);
+  box.innerHTML = '';
+  if (hit) {
+    box.appendChild(document.createTextNode(hit.msg));
+    if (hit.video) {
+      const wrap = document.createElement('div');
+      wrap.className = 'secret-video';
+      wrap.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(hit.video)}?rel=0&playsinline=1"
+        title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen loading="lazy"></iframe>`;
+      box.appendChild(wrap);
+    }
+  }
+}
+
 function showResult(send) {
   showPhase(3);
   window.scrollTo({ top: 0 });
   if (send) sendResult(finalKami7);
+  showSecret(finalKami7);
   resultBlob = null;
   const img = document.getElementById('result-img');
   img.removeAttribute('src');
