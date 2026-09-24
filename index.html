@@ -1093,7 +1093,16 @@ function refreshPickMarks() {
   updateSelectionBar();
 }
 
+// 下の固定バーの高さぶん、ページの下に余白をとる（最後の行がバーに隠れないように）
+function syncBottomSpace() {
+  const bar = document.getElementById('sticky-bar');
+  const hgt = bar.classList.contains('hidden') ? 0 : bar.offsetHeight;
+  document.body.style.paddingBottom = (hgt + 24) + 'px';
+}
+window.addEventListener('resize', syncBottomSpace);
+
 function updateSelectionBar() {
+  requestAnimationFrame(syncBottomSpace);
   const slots = document.getElementById('pick-slots');
   slots.classList.toggle('hidden', !pickMode);
   document.querySelector('.sel-info').firstChild.textContent = pickMode ? '神7 ' : '選択中 ';
@@ -1187,6 +1196,7 @@ function showPhase(n) {
     document.getElementById('phase' + i).classList.toggle('hidden', i !== n));
   document.getElementById('mode-tabs').classList.toggle('hidden', n !== 1);
   document.getElementById('sticky-bar').classList.toggle('hidden', n !== 1);
+  requestAnimationFrame(syncBottomSpace);
 }
 
 function startSort() {
