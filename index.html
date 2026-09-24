@@ -338,6 +338,20 @@
   .pick-slot.first span { background: #e6b422; }
   .pick-slot:not(.filled) span { background: transparent; color: #ccb; position: static; display: flex;
     width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 11px; }
+  .member-grid.pick-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .pick-grid .card { padding: 3px; border-width: 3px; border-radius: 12px; }
+  .pick-grid .card img { border-radius: 9px; }
+  .pick-grid .card .name { font-size: 10px; margin-top: 3px; }
+  .pick-grid .card .gen { display: none; }
+  .pick-grid .card .check {
+    width: 22px; height: 22px; top: 6px; right: 6px; font-size: 10px;
+  }
+  .pick-grid .badge-current { top: 6px; left: 6px; font-size: 8px; padding: 0 3px; }
+  .gen-head {
+    grid-column: 1 / -1; text-align: left; font-weight: bold; color: var(--main);
+    font-size: 14px; margin: 10px 0 0; padding-bottom: 3px; border-bottom: 2px solid var(--line);
+  }
+  .gen-head:first-child { margin-top: 0; }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -934,7 +948,7 @@ function switchMode(newMode, initial = false) {
   const label = MODES[mode].label;
   document.getElementById('main-title').textContent = `NMB48 ${label} 神7 好き顔ソート`;
   document.title = `NMB48 ${label} 神7 好き顔ソート`;
-  document.getElementById('phase1-title').textContent = `【予選】好きな顔、選んでな`;
+  document.getElementById('phase1-title').textContent = pickMode ? '【自分で並べる】好きな子を選んでな' : '【予選】好きな顔、選んでな';
 
   shuffledMembers = shuffle(MODES[mode].members);
   buildGenFilter();
@@ -1000,7 +1014,7 @@ function toggleGenPanel() {
    ========================================================= */
 function onFilterChange() {
   const q = document.getElementById('search-box').value.trim();
-  filtered = shuffledMembers.filter(m =>
+  filtered = (pickMode ? MODES[mode].members : shuffledMembers).filter(m =>
     selectedGens.has(m.gen) && (!q || m.name.includes(q)));
   currentPage = 0;
   renderPrelimPage();
@@ -1009,6 +1023,10 @@ function onFilterChange() {
 function renderPrelimPage() {
   const grid = document.getElementById('prelim-grid');
   grid.innerHTML = '';
+  grid.classList.toggle('pick-grid', pickMode);
+  ['page-counter', 'next-btn', 'prev-btn'].forEach(id =>
+    document.getElementById(id).classList.toggle('hidden', pickMode));
+  if (pickMode) { renderPickList(grid); return; }
   const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   document.getElementById('next-btn').disabled = filtered.length === 0;
   const pageMembers = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
@@ -1036,6 +1054,42 @@ function renderPrelimPage() {
   document.getElementById('prev-btn').classList.toggle('hidden', currentPage === 0);
   document.getElementById('next-btn').textContent =
     currentPage >= maxPage - 1 ? (pickMode ? '最初のページに戻る' : '選び終わった！ソート行こか') : '次の4人いこか';
+  updateSelectionBar();
+}
+
+// 自分で並べる：全メンバーを期生順に（期ごとの見出し付き）
+function renderPickList(grid) {
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="empty-msg">${selectedGens.size === 0 ? '期生を1つ以上選んでな' : '該当するメンバーおらへんわ'}</div>`;
+  }
+  let lastGen = null;
+  filtered.forEach(m => {
+    if (m.gen !== lastGen) {
+      lastGen = m.gen;
+      const hd = document.createElement('div');
+      hd.className = 'gen-head';
+      hd.textContent = m.gen;
+      grid.appendChild(hd);
+    }
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = m.id;
+    card.onclick = () => addPick(m);
+    const badge = (mode === 'all' && m.current) ? `<span class="badge-current">現役</span>` : '';
+    card.innerHTML = `${badge}<div class="check"></div>${imgTag(m, 'loading="lazy"')}<span class="name">${m.name}</span>`;
+    grid.appendChild(card);
+  });
+  refreshPickMarks();
+}
+
+// 選んだ回数の表示だけ更新（一覧を作り直さないのでスクロール位置がずれない）
+function refreshPickMarks() {
+  document.querySelectorAll('#prelim-grid .card[data-id]').forEach(card => {
+    const id = Number(card.dataset.id);
+    const count = picks.filter(p => p.id === id).length;
+    card.classList.toggle('selected', count > 0);
+    card.querySelector('.check').textContent = count > 1 ? '×' + count : count === 1 ? '✓' : '＋';
+  });
   updateSelectionBar();
 }
 
@@ -1094,22 +1148,23 @@ function setPickMode(on) {
   pickMode = on;
   document.querySelectorAll('[data-pm]').forEach(b =>
     b.classList.toggle('active', (b.dataset.pm === 'pick') === on));
+  document.getElementById('phase1-title').textContent = on ? '【自分で並べる】好きな子を選んでな' : '【予選】好きな顔、選んでな';
   document.getElementById('phase1-desc').innerHTML = on
     ? '写真をタップした順に1位→7位の枠に入るで。<br>同じ子を何回タップしてもOK！推し一色の神7もいけるで'
     : '「好きやわ〜」って思う子、何人選んでもええで！<br>1人も選ばんと次行ってもかまへんよ';
-  renderPrelimPage();
+  onFilterChange();
 }
 
 function addPick(m) {
   if (picks.length >= 7) { showToast('7枠埋まったで。下の枠をタップすると外せるで'); return; }
   picks.push(m);
-  renderPrelimPage();
+  refreshPickMarks();
   if (picks.length === 7) showToast('神7そろったで！「この神7で決定」を押してな');
 }
 
 function removePick(i) {
   picks.splice(i, 1);
-  renderPrelimPage();
+  refreshPickMarks();
 }
 
 function changePage(d) {
