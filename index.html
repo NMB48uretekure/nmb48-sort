@@ -320,6 +320,24 @@
   .admin-row .ct { font-weight: bold; font-size: 16px; }
   .admin-row .ct small { font-size: 11px; color: #999; font-weight: normal; }
   .admin-bar { height: 5px; background: var(--main); border-radius: 3px; margin-top: 4px; }
+  .pick-tabs { margin: 4px 0 10px; }
+  .pick-tabs .mode-tab { font-size: 13px; padding: 8px 4px; }
+  .sticky-inner { flex-wrap: wrap; }
+  .pick-slots { flex-basis: 100%; display: flex; gap: 5px; justify-content: center; margin-bottom: 6px; }
+  .pick-slot {
+    width: 40px; height: 40px; border-radius: 9px; position: relative; overflow: hidden;
+    background: var(--sub); border: 2px dashed var(--line); cursor: pointer; flex-shrink: 0;
+  }
+  .pick-slot.filled { border: 2px solid var(--main); }
+  .pick-slot.first.filled { border-color: #e6b422; }
+  .pick-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pick-slot span {
+    position: absolute; left: 0; bottom: 0; background: var(--main); color: #fff;
+    font-size: 9px; font-weight: bold; padding: 0 3px; border-top-right-radius: 5px;
+  }
+  .pick-slot.first span { background: #e6b422; }
+  .pick-slot:not(.filled) span { background: transparent; color: #ccb; position: static; display: flex;
+    width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 11px; }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -342,7 +360,11 @@
 <!-- フェーズ1：予選（4人ずつ全員を見ていく） -->
 <div id="phase1" class="step-container">
   <h2 id="phase1-title">【予選】好きな顔、選んでな</h2>
-  <p class="desc">「好きやわ〜」って思う子、何人選んでもええで！<br>1人も選ばんと次行ってもかまへんよ</p>
+  <div class="mode-tabs pick-tabs">
+    <button class="mode-tab active" data-pm="sort" onclick="setPickMode(false)">ソートで決める<small>2択バトルで順位づけ</small></button>
+    <button class="mode-tab" data-pm="pick" onclick="setPickMode(true)">自分で並べる<small>同じ人も何回でもOK</small></button>
+  </div>
+  <p class="desc" id="phase1-desc">「好きやわ〜」って思う子、何人選んでもええで！<br>1人も選ばんと次行ってもかまへんよ</p>
 
   <!-- 期生の絞り込み（複数選択） -->
   <div class="gen-panel">
@@ -373,6 +395,7 @@
 <!-- 画面下に固定：選択数とソート開始 -->
 <div class="sticky-bar" id="sticky-bar">
   <div class="sticky-inner">
+    <div class="pick-slots hidden" id="pick-slots"></div>
     <div class="sel-info">選択中 <b id="sel-count">0</b>人<small id="sel-hint"></small></div>
     <button id="clear-btn" class="btn-secondary btn-small" onclick="clearSelection()">リセット</button>
     <button id="to-sort-btn" class="btn-small" onclick="startSort()" disabled>ソート開始</button>
@@ -410,7 +433,6 @@
     <div id="result-loading" class="result-loading">画像つくってるで…</div>
   </div>
   <p class="gen-help" style="text-align:center">画像を長押ししても保存できるで</p>
-  <p class="gen-help" id="stats-note" style="text-align:center">※結果（順位だけ）は匿名でランキング集計に使わせてもらうで</p>
 
   <button class="btn-wide btn-twitter" onclick="shareToX()">𝕏 に画像つきで投稿する</button>
   <button class="btn-wide" onclick="saveImage()">画像を保存する</button>
@@ -851,6 +873,8 @@ let prelimSelected = [];
 let currentPage = 0;
 let filtered = [];
 let shuffledMembers = [];
+let pickMode = false;   // true = 自分で並べる（同じ人も何回でもOK）
+let picks = [];
 let selectedGens = new Set();   // 絞り込み中の期生（空=該当なし）
 let allGens = [];   // 予選の表示順（開くたびにランダム）
 
@@ -876,7 +900,6 @@ document.getElementById('count-current').textContent = `${CURRENT_MEMBERS.length
 document.getElementById('count-all').textContent = `卒業生含む${ALL_MEMBERS.length}人`;
 
 switchMode(getParam('mode') === 'all' ? 'all' : 'current', true);
-if (!statsReady()) document.getElementById('stats-note').classList.add('hidden');
 // 管理者用ページ：URLの最後に ?admin を付けて開く
 if (getParam('admin') !== null) {
   ['phase1', 'phase2', 'phase3', 'sticky-bar', 'mode-tabs'].forEach(id =>
@@ -894,6 +917,7 @@ function switchMode(newMode, initial = false) {
 
   mode = newMode;
   prelimSelected = [];
+  picks = [];
   currentPage = 0;
   document.getElementById('search-box').value = '';
 
@@ -994,24 +1018,52 @@ function renderPrelimPage() {
   }
   pageMembers.forEach(m => {
     const card = document.createElement('div');
-    card.className = 'card' + (prelimSelected.some(s => s.id === m.id) ? ' selected' : '');
+    const count = picks.filter(p => p.id === m.id).length;
+    const on = pickMode ? count > 0 : prelimSelected.some(s => s.id === m.id);
+    card.className = 'card' + (on ? ' selected' : '');
     card.onclick = () => {
+      if (pickMode) { addPick(m); return; }
       togglePrelimSelect(m);
       card.classList.toggle('selected', prelimSelected.some(s => s.id === m.id));
     };
     const badge = (mode === 'all' && m.current) ? `<span class="badge-current">現役</span>` : '';
-    card.innerHTML = `${badge}<div class="check">✓</div>${imgTag(m)}<span class="name">${m.name}</span><span class="gen">${m.gen}</span>`;
+    const mark = pickMode ? (count > 1 ? '×' + count : count === 1 ? '✓' : '＋') : '✓';
+    card.innerHTML = `${badge}<div class="check">${mark}</div>${imgTag(m)}<span class="name">${m.name}</span><span class="gen">${m.gen}</span>`;
     grid.appendChild(card);
   });
 
   document.getElementById('page-counter').textContent = `${currentPage + 1} / ${maxPage}`;
   document.getElementById('prev-btn').classList.toggle('hidden', currentPage === 0);
   document.getElementById('next-btn').textContent =
-    currentPage >= maxPage - 1 ? '選び終わった！ソート行こか' : '次の4人いこか';
+    currentPage >= maxPage - 1 ? (pickMode ? '最初のページに戻る' : '選び終わった！ソート行こか') : '次の4人いこか';
   updateSelectionBar();
 }
 
 function updateSelectionBar() {
+  const slots = document.getElementById('pick-slots');
+  slots.classList.toggle('hidden', !pickMode);
+  document.querySelector('.sel-info').firstChild.textContent = pickMode ? '神7 ' : '選択中 ';
+  if (pickMode) {
+    slots.innerHTML = '';
+    for (let i = 0; i < 7; i++) {
+      const m = picks[i];
+      const s = document.createElement('div');
+      s.className = 'pick-slot' + (m ? ' filled' : '') + (i === 0 ? ' first' : '');
+      s.innerHTML = m ? `${imgTag(m)}<span>${i + 1}</span>` : `<span>${i + 1}位</span>`;
+      if (m) s.onclick = () => removePick(i);
+      slots.appendChild(s);
+    }
+    const n = picks.length;
+    document.getElementById('sel-count').textContent = n;
+    document.getElementById('clear-btn').disabled = n === 0;
+    const btn = document.getElementById('to-sort-btn');
+    btn.textContent = 'この神7で決定';
+    btn.disabled = n < 7;
+    document.getElementById('sel-hint').textContent =
+      n < 7 ? `あと${7 - n}枠。写真をタップした順に1位から入るで` : '枠をタップすると外せるで';
+    return;
+  }
+  document.getElementById('to-sort-btn').textContent = 'ソート開始';
   const n = prelimSelected.length;
   document.getElementById('sel-count').textContent = n;
   document.getElementById('clear-btn').disabled = n === 0;
@@ -1031,9 +1083,33 @@ function togglePrelimSelect(m) {
 function nextGroup() {
   const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   if (currentPage < maxPage - 1) { changePage(1); return; }
+  if (pickMode) { changePage(-currentPage); return; }
   // 最後まで見終わった
   if (prelimSelected.length >= MIN_PRELIM) startSort();
   else showToast(`神7作るんやから、最低${MIN_PRELIM}人は選んでや（今${prelimSelected.length}人）`);
+}
+
+/* ---------- 自分で並べるモード ---------- */
+function setPickMode(on) {
+  pickMode = on;
+  document.querySelectorAll('[data-pm]').forEach(b =>
+    b.classList.toggle('active', (b.dataset.pm === 'pick') === on));
+  document.getElementById('phase1-desc').innerHTML = on
+    ? '写真をタップした順に1位→7位の枠に入るで。<br>同じ子を何回タップしてもOK！推し一色の神7もいけるで'
+    : '「好きやわ〜」って思う子、何人選んでもええで！<br>1人も選ばんと次行ってもかまへんよ';
+  renderPrelimPage();
+}
+
+function addPick(m) {
+  if (picks.length >= 7) { showToast('7枠埋まったで。下の枠をタップすると外せるで'); return; }
+  picks.push(m);
+  renderPrelimPage();
+  if (picks.length === 7) showToast('神7そろったで！「この神7で決定」を押してな');
+}
+
+function removePick(i) {
+  picks.splice(i, 1);
+  renderPrelimPage();
 }
 
 function changePage(d) {
@@ -1043,7 +1119,8 @@ function changePage(d) {
 }
 
 function clearSelection() {
-  prelimSelected = [];
+  if (pickMode) picks = [];
+  else prelimSelected = [];
   renderPrelimPage();
 }
 
@@ -1058,6 +1135,12 @@ function showPhase(n) {
 }
 
 function startSort() {
+  if (pickMode) {
+    if (picks.length < 7) return;
+    finalKami7 = picks.slice(0, 7);
+    showResult(false);
+    return;
+  }
   if (prelimSelected.length < MIN_PRELIM) return;
   showPhase(2);
   window.scrollTo({ top: 0 });
@@ -1134,11 +1217,16 @@ function undo() {
    フェーズ3：結果
    ========================================================= */
 function showRanking() {
-  showPhase(3);
-  window.scrollTo({ top: 0 });
   const sorted = sortQueues[0] || [];
   finalKami7 = sorted.slice(0, 7);
-  sendResult(finalKami7);
+  showResult(true);
+}
+
+// send: ソートの結果だけ集計に送る（自分で並べた神7は送らない）
+function showResult(send) {
+  showPhase(3);
+  window.scrollTo({ top: 0 });
+  if (send) sendResult(finalKami7);
   resultBlob = null;
   const img = document.getElementById('result-img');
   img.removeAttribute('src');
@@ -1462,6 +1550,7 @@ async function shareToX() {
 
 function restart() {
   prelimSelected = [];
+  picks = [];
   shuffledMembers = shuffle(MODES[mode].members);
   showPhase(1);
   onFilterChange();
