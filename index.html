@@ -369,6 +369,8 @@
   .pick-slots.many { display: grid; grid-template-columns: repeat(8, 34px); gap: 4px; justify-content: center; }
   .pick-slots.many .pick-slot { width: 32px; height: 32px; border-radius: 7px; }
   .pick-slots.many .pick-slot:not(.filled) span { font-size: 9px; }
+  .song-link { display: inline-block; font-size: 12px; color: var(--main-dark); text-decoration: none; background: #fff;
+    border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 14px; margin: 2px 0 4px; }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -381,6 +383,7 @@
 <body>
 
 <h1 id="main-title">NMB48 神7 好き顔ソート</h1>
+<a class="song-link" href="songs.html">楽曲ソートはこっち →</a>
 
 <!-- モード切替（現役 / 歴代） -->
 <div class="mode-tabs" id="mode-tabs">
