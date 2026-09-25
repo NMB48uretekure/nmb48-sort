@@ -511,7 +511,7 @@ const STATS = {
      center  … 1位（センター）が member                    例：{ type:'center', member:'塩月希依音', msg:'…' }
      exact   … 1〜7位が members と順番まで完全一致
      set     … members が全員、神7に入っている（順番自由）
-     allGen  … 7人全員が同じ期 gen                         例：{ type:'allGen', gen:'11期', msg:'…' }
+     allGen  … 7人全員が期 gen（gens で複数の期もOK）     例：{ type:'allGen', gens:['ドラフト3期','6期'], msg:'…' }
      sameGen … 7人全員が同じ期（どの期でも）              {gen} = その期
      allGrad … 7人全員が卒業生
    video: 'YouTubeの動画ID' を付けると、メッセージの下に動画を埋め込んで表示
@@ -520,8 +520,17 @@ const SECRETS = [
   // 卒業生メンバーの組み合わせ（全員卒業生メッセージより優先）
   { type: 'set', members: ['白間美瑠', '上西恵', '小笠原茉由', '山本彩', '渡辺美優紀', '吉田朱里', '市川美織'], msg: '諦めなければ必ずチャンスはある' },
   { type: 'set', members: ['太田夢莉', '薮下柊', '渋谷凪咲', '須藤凜々花', '内木志'], msg: 'ほら君にかかる 虹になる🌈' },
+  // ↓ 7人全員が特定の期
+  { type: 'allGen', gen: '11期', msg: 'なんばの未来' },
+  { type: 'allGen', gen: '10期', msg: '無限大ノックしろ' },
+  { type: 'allGen', gen: '9期',  msg: '世代交代前夜亡霊' },
+  { type: 'allGen', gen: '8期',  msg: '本領八期！' },
+  { type: 'allGen', gens: ['7期', '7.5期'], msg: 'We are IDOL！' },
+  { type: 'allGen', gens: ['ドラフト3期', '6期'], needAll: true, msg: 'ドラ三六期の絆✨️' },
   { type: 'allGrad', msg: '全員卒業生！ 今のNMBも見てって〜！！', video: 'Wtg2V1E1IT8' },
   // ↓ 特定メンバーの組み合わせ（人数の多い組み合わせを先に判定）
+  { type: 'set', members: ['宮原心音', '田中ミリア', '宮崎紗衣', '木根彩呂花', '宮本杏海', '衣笠彩実'], msg: 'Chu♡needsさいこー！' },
+  { type: 'set', members: ['眞鍋杏樹', '平山真衣', '隅野和奏', '佐月愛果'], msg: 'おにぎらず🍙' },
   { type: 'set', members: ['坂下真心', '桜田彩叶', '坂田心咲', '龍本弥生'], msg: 'さかさかあやよん！！！！' },
   { type: 'set', members: ['吉田朱里', '太田夢莉', '渋谷凪咲', '村瀬紗英'], msg: '🩷Quintet🩷' },
   { type: 'set', members: ['高橋ことね', '三鴨くるみ', '内田愛彩'], msg: 'くることしゃん' },
@@ -531,6 +540,11 @@ const SECRETS = [
   { type: 'set', members: ['谷口詩乃', '田中れい', '桜井ひまり'], msg: 'おきらくトリオ！！！' },
   { type: 'set', members: ['山本望叶', '横野すみれ', '南波陽向'], msg: 'にゃんすーちょ' },
   { type: 'set', members: ['桜田彩叶', '龍本弥生'], msg: 'あやよん📻' },
+  { type: 'set', members: ['眞鍋杏樹', '平山真衣'], msg: 'じゅってぃーは難波の宝' },
+  { type: 'set', members: ['松本海日菜', '坂本理紗'], msg: 'りさっひー💛🩵' },
+  { type: 'set', members: ['宮本杏海', '衣笠彩実'], msg: 'あやあみ👶' },
+  { type: 'set', members: ['西田帆花', '村井悠莉'], msg: '西田と村井' },
+  { type: 'set', members: ['竹田京加', '高橋樹奈'], msg: 'KSGK' },
   { type: 'set', members: ['松本海日菜', '松岡さくら'], msg: 'キャッツ🐱' },
   { type: 'set', members: ['善家侑莉花', '高橋樹奈'], msg: 'ぜんじゅなー！' },
   { type: 'set', members: ['渋谷凪咲', '薮下柊'], msg: 'なぎっしゅーやね！' },
@@ -1347,7 +1361,8 @@ function findSecret(list) {
       case 'center':  ok = names[0] === s.member; break;
       case 'exact':   ok = (s.members || []).length === 7 && s.members.every((n, i) => names[i] === n); break;
       case 'set':     ok = (s.members || []).length > 0 && s.members.every(n => names.includes(n)); break;
-      case 'allGen':  ok = list.length === 7 && list.every(m => m.gen === s.gen); vars.gen = s.gen; break;
+      case 'allGen':  ok = list.length === 7 && list.every(m => (s.gens || [s.gen]).includes(m.gen))
+                     && (!s.needAll || s.gens.every(g => list.some(m => m.gen === g))); vars.gen = s.gen || list[0].gen; break;
       case 'sameGen': ok = list.length === 7 && list.every(m => m.gen === list[0].gen); break;
       case 'allGrad': ok = list.length === 7 && list.every(m => !m.current); break;
     }
