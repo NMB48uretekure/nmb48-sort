@@ -208,6 +208,22 @@ const JACKETS = {
 const JACKET_DIR = 'jacket/';
 SONGS.forEach((s, i) => s.id = i);
 
+/* ---------- 集計（神7ソートと同じGoogleフォームに「楽曲」として送る・上位7曲まで） ---------- */
+const STATS = {
+  formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLScy_xTn_iuWWdzqDUNa5kI3OSHBHHjvrB6h3L2Z9cUYVhrNbg/viewform',
+  entryMode: 'entry.775957258',
+  entryRanks: ['entry.496043935', 'entry.129893525', 'entry.874597884', 'entry.1111194283', 'entry.1312571171', 'entry.1002050633', 'entry.875095588'],
+};
+function sendResult(list) {
+  if (!STATS.formUrl || list.length < 7) return;
+  try {
+    const body = new URLSearchParams();
+    body.append(STATS.entryMode, '楽曲');
+    list.slice(0, 7).forEach((s, i) => body.append(STATS.entryRanks[i], s.t));
+    fetch(STATS.formUrl.replace(/\/viewform.*$/, '/formResponse'), { method: 'POST', mode: 'no-cors', body });
+  } catch (e) {}
+}
+
 const CATS = ['表題曲', 'カップリング', 'アルバム・その他', '公演曲'];
 let TOP_N = 10;
 let catOn = new Set(CATS);
@@ -451,6 +467,7 @@ function showRanking() {
   finalRanks = finalList.map((s, i) => i + 1);
   for (let i = 1; i < finalList.length; i++) if (tied(finalList[i - 1], finalList[i])) finalRanks[i] = finalRanks[i - 1];
 
+  sendResult(finalList);
   showPhase(3);
   window.scrollTo(0, 0);
   document.getElementById('result-title').textContent = `あんたの好きな曲TOP${finalList.length}、できたで！`;
