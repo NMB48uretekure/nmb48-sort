@@ -365,6 +365,10 @@
   @keyframes secretPop { 0% { transform: scale(.7); opacity: 0; } 70% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
   .secret-clip { margin-top: 10px; }
   .secret-clip video { width: 100%; display: block; border-radius: 10px; background: #000; }
+  .size-tabs { margin-bottom: 6px; }
+  .pick-slots.many { display: grid; grid-template-columns: repeat(8, 34px); gap: 4px; justify-content: center; }
+  .pick-slots.many .pick-slot { width: 32px; height: 32px; border-radius: 7px; }
+  .pick-slots.many .pick-slot:not(.filled) span { font-size: 9px; }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -387,6 +391,10 @@
 <!-- フェーズ1：予選（4人ずつ全員を見ていく） -->
 <div id="phase1" class="step-container">
   <h2 id="phase1-title">【予選】好きな顔、選んでな</h2>
+  <div class="mode-tabs pick-tabs size-tabs">
+    <button class="mode-tab active" data-sz="7" onclick="setSize(7)">神7<small>上位7人を決める</small></button>
+    <button class="mode-tab" data-sz="16" onclick="setSize(16)">選抜16<small>上位16人を決める</small></button>
+  </div>
   <div class="mode-tabs pick-tabs">
     <button class="mode-tab active" data-pm="sort" onclick="setPickMode(false)">ソートで決める<small>2択バトルで順位づけ</small></button>
     <button class="mode-tab" data-pm="pick" onclick="setPickMode(true)">自分で並べる<small>同じ人も何回でもOK</small></button>
@@ -453,7 +461,7 @@
 
 <!-- フェーズ3：結果 -->
 <div id="phase3" class="step-container hidden">
-  <h2>あんたの神7、できたで！</h2>
+  <h2 id="result-title">あんたの神7、できたで！</h2>
   <div id="secret-msg" class="secret-msg hidden"></div>
   <p class="desc">この画像をそのままXに投稿できるで</p>
 
@@ -518,9 +526,175 @@ const STATS = {
      allGen  … 7人全員が期 gen（gens で複数の期もOK）     例：{ type:'allGen', gens:['ドラフト3期','6期'], msg:'…' }
      sameGen … 7人全員が同じ期（どの期でも）              {gen} = その期
      allGrad … 7人全員が卒業生
+     songExact … 結果の全員が SONGS のどれかの曲の歌唱メンバーとピッタリ同じ
+     songSub   … SONGS のどれかの曲の歌唱メンバーが全員、結果に入ってる
    video: 'YouTubeの動画ID' を付けると、メッセージの下に動画を埋め込んで表示
 */
+/* ---------- 楽曲データ（歌唱メンバー2〜16人の曲） ----------
+   ['曲名', 'メンバー,メンバー,…']  出典：48pedia ほか */
+const SONGS = [
+  ["絶滅黒髪少女", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,近藤里奈,篠原栞那,上西恵,白間美瑠,福本愛菜,松田栞,山口夕輝,山田菜々,山本彩,吉田朱里,渡辺美優紀"],
+  ["オーマイガー!", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,上西恵,白間美瑠,福本愛菜,山口夕輝,山田菜々,山本彩,城恵理子,村上文香,矢倉楓子,山岸奈津美,與儀ケイラ"],
+  ["純情U-19", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,近藤里奈,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,渡辺美優紀,城恵理子,木下百花,矢倉楓子,與儀ケイラ"],
+  ["ナギイチ", "小笠原茉由,門脇佳奈子,小谷里歩,近藤里奈,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,吉田朱里,渡辺美優紀,城恵理子,谷川愛梨,木下百花,村上文香,矢倉楓子"],
+  ["ヴァージニティー", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,吉田朱里,渡辺美優紀,城恵理子,谷川愛梨,加藤夕夏,薮下柊"],
+  ["北川謙二", "小笠原茉由,門脇佳奈子,岸野里香,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,吉田朱里,小谷里歩,渡辺美優紀,谷川愛梨,矢倉楓子,加藤夕夏,薮下柊,横山由依"],
+  ["僕らのユリイカ", "小笠原茉由,小谷里歩,上西恵,白間美瑠,山本彩,吉田朱里,市川美織,渡辺美優紀,島田玲奈,高野祐衣,谷川愛梨,山田菜々,與儀ケイラ,矢倉楓子,加藤夕夏,薮下柊"],
+  ["カモネギックス", "小笠原茉由,門脇佳奈子,小谷里歩,上西恵,白間美瑠,山本彩,吉田朱里,市川美織,渡辺美優紀,高野祐衣,谷川愛梨,山田菜々,與儀ケイラ,矢倉楓子,加藤夕夏,薮下柊"],
+  ["高嶺の林檎", "小笠原茉由,小谷里歩,上西恵,白間美瑠,山本彩,吉田朱里,市川美織,渡辺美優紀,高野祐衣,谷川愛梨,村瀬紗英,山田菜々,矢倉楓子,加藤夕夏,薮下柊,渋谷凪咲"],
+  ["僕はいない", "太田夢莉,加藤夕夏,岸野里香,上西恵,須藤凜々花,山本彩,吉田朱里,沖田彩華,谷川愛梨,藤江れいな,村瀬紗英,矢倉楓子,白間美瑠,薮下柊,渡辺美優紀,渋谷凪咲"],
+  ["ワロタピーポー", "市川美織,谷川愛梨,山本彩加,山本彩,岩田桃夏,加藤夕夏,吉田朱里,白間美瑠,渋谷凪咲,植村梓,太田夢莉,沖田彩華,城恵理子,上西怜,村瀬紗英,矢倉楓子"],
+  ["欲望者", "市川美織,梅山恋和,谷川愛梨,山本彩加,山本彩,岩田桃夏,加藤夕夏,渋谷凪咲,白間美瑠,吉田朱里,植村梓,太田夢莉,城恵理子,上西怜,村瀬紗英,矢倉楓子"],
+  ["だってだってだって", "梅山恋和,山本彩加,川上千尋,貞野遥香,南羽諒,村瀬紗英,吉田朱里,渋谷凪咲,白間美瑠,安田桃寧,加藤夕夏,小嶋花梨,上西怜,新澤菜央,原かれん,横野すみれ"],
+  ["これが愛なのか？", "塩月希依音,坂田心咲,泉綾乃,瓶野神音,川上千尋,小嶋花梨,平山真衣,上西怜,隅野和奏,芳賀礼,山本望叶,和田海佑,安部若菜,桜田彩叶,新澤菜央,出口結菜"],
+  ["チューストライク", "塩月希依音,青原優花,泉綾乃,川上千尋,小嶋花梨,平山真衣,芳賀礼,山本望叶,和田海佑,青原和花,安部若菜,坂下真心,坂田心咲,桜田彩叶,新澤菜央,三鴨くるみ"],
+  ["青春のデッドライン", "塩月希依音,青原優花,池田典愛,泉綾乃,平山真衣,池帆乃香,芳賀礼,三鴨くるみ,安部若菜,坂下真心,坂田心咲,桜田彩叶,新澤菜央,龍本弥生,石山千尋,高橋ことね"],
+  ["初めてのオール", "塩月希依音,青原優花,池帆乃香,石山千尋,泉綾乃,板垣心和,坂下真心,坂田心咲,桜田彩叶,新澤菜央,龍本弥生,芳賀礼,平山真衣,三鴨くるみ,岡腰星来,田中れい"],
+  ["青春のラップタイム", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,近藤里奈,篠原栞那,上西恵,白間美瑠,福本愛菜,松田栞,山口夕輝,山田菜々,山本彩,吉田朱里,渡辺美優紀"],
+  ["妄想ガールフレンド", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,小谷里歩,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,吉田朱里,渡辺美優紀,城恵理子,谷川愛梨,加藤夕夏,薮下柊"],
+  ["インゴール", "小笠原茉由,門脇佳奈子,岸野里香,上西恵,山本彩,吉田朱里,渡辺美優紀,沖田彩華,小柳有沙,谷川愛梨,村瀬紗英,矢倉楓子,山岸奈津美,上枝恵美加,小林莉加子,松田栞"],
+  ["届かなそうで届くもの", "小笠原茉由,木下春奈,小谷里歩,近藤里奈,上西恵,白間美瑠,山本彩,吉田朱里,渡辺美優紀,木下百花,山田菜々,矢倉楓子,太田夢莉,久代梨奈,薮下柊,横山由依"],
+  ["卒業旅行", "岸野里香,上西恵,山岸奈津美,山口夕輝,吉田朱里,山本彩,小谷里歩,沖田彩華,川上礼奈,木下百花,近藤里奈,白間美瑠,山田菜々,門脇佳奈子,木下春奈,渡辺美優紀"],
+  ["命のへそ", "明石奈津子,石田優美,太田夢莉,加藤夕夏,岸野里香,古賀成美,小谷里歩,城恵理子,上西恵,須藤凜々花,西澤瑠莉奈,西村愛華,山尾梨奈,山口夕輝,吉田朱里,山本彩"],
+  ["片想いよりも思い出を…", "太田夢莉,小谷里歩,上西恵,須藤凜々花,吉田朱里,植村梓,谷川愛梨,藤江れいな,村瀬紗英,矢倉楓子,白間美瑠,市川美織,門脇佳奈子,内木志,薮下柊,渋谷凪咲"],
+  ["夢に色がない理由", "明石奈津子,石田優美,太田夢莉,加藤夕夏,岸野里香,古賀成美,小谷里歩,城恵理子,上西恵,須藤凜々花,西澤瑠莉奈,西村愛華,山尾梨奈,山口夕輝,吉田朱里,山本彩"],
+  ["儚い物語", "明石奈津子,石田優美,太田夢莉,加藤夕夏,岸野里香,古賀成美,城恵理子,上西恵,須藤凜々花,西澤瑠莉奈,山尾梨奈,山口夕輝,吉田朱里,山本彩,西仲七海,本郷柚巴"],
+  ["空から愛が降って来る", "明石奈津子,石田優美,太田夢莉,加藤夕夏,岸野里香,古賀成美,城恵理子,上西恵,須藤凜々花,西澤瑠莉奈,山尾梨奈,山口夕輝,山本彩,吉田朱里,西仲七海,本郷柚巴"],
+  ["孤独ギター", "東由樹,市川美織,日下このみ,古賀成美,上西恵,須藤凜々花,谷川愛梨,内木志,林萌々香,堀詩音,松村芽久未,三田麻央,薮下柊,山尾梨奈,山本彩加,山本彩"],
+  ["どこかでキスを", "東由樹,市川美織,梅山恋和,日下このみ,古賀成美,小嶋花梨,谷川愛梨,内木志,林萌々香,堀詩音,本郷柚巴,溝川実来,三田麻央,山尾梨奈,山本彩加,山本彩"],
+  ["本当の自分の境界線", "安藤愛璃菜,石田優美,磯佳奈江,岩田桃夏,鵜野みずき,大段舞依,加藤夕夏,川上千尋,川上礼奈,中野麗来,西澤瑠莉奈,安田桃寧,山田寿々,吉田朱里,白間美瑠,渋谷凪咲"],
+  ["普通の水", "明石奈津子,石塚朱莉,井尻晏菜,植村梓,太田夢莉,沖田彩華,久代梨奈,清水里香,城恵理子,上西怜,武井紗良,中川美音,水田詩織,村瀬紗英,森田彩花,矢倉楓子"],
+  ["匙を投げるな!", "明石奈津子,石塚朱莉,井尻晏菜,植村梓,太田夢莉,沖田彩華,久代梨奈,清水里香,城恵理子,上西怜,武井紗良,中川美音,水田詩織,村瀬紗英,森田彩花,矢倉楓子"],
+  ["12月31日", "小笠原茉由,門脇佳奈子,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,吉田朱里,小谷里歩,横山由依,渡辺美優紀,谷川愛梨,矢倉楓子,與儀ケイラ,加藤夕夏,薮下柊"],
+  ["Lily", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,近藤里奈,篠原栞那,上西恵,白間美瑠,福本愛菜,山口夕輝,山田菜々,山本彩,吉田朱里,小谷里歩,横山由依,渡辺美優紀"],
+  ["アーモンドクロワッサン計画", "赤澤萌乃,石塚朱莉,井尻晏菜,植田碧麗,梅原真子,太田夢莉,加藤夕夏,上枝恵美加,日下このみ,久代梨奈,黒川葉月,河野早紀,小林莉加子,室加奈子,薮下柊,山内つばさ"],
+  ["君と出会って僕は変わった", "矢倉楓子,市川美織,渡辺美優紀,小笠原茉由,小谷里歩,上西恵,白間美瑠,山本彩,吉田朱里,高野祐衣,村瀬紗英,山田菜々,加藤夕夏,上枝恵美加,薮下柊,渋谷凪咲"],
+  ["しがみついた青春", "白間美瑠,山本彩,渡辺美優紀,渋谷凪咲,太田夢莉,加藤夕夏,上西恵,須藤凜々花,吉田朱里,植村梓,谷川愛梨,藤江れいな,村瀬紗英,矢倉楓子,日下このみ,薮下柊"],
+  ["Done", "泉綾乃,加藤夕夏,小嶋花梨,坂田心咲,貞野遥香,渋谷凪咲,新澤菜央,山本望叶,安部若菜,川上千尋,塩月希依音,上西怜,出口結菜,原かれん,前田令子,隅野和奏"],
+  ["僕が負けた夏", "小笠原茉由,岸野里香,木下春奈,小谷里歩,篠原栞那,福本愛菜,山田菜々,山本彩"],
+  ["待ってました、新学期", "門脇佳奈子,近藤里奈,上西恵,白間美瑠,松田栞,山口夕輝,吉田朱里,渡辺美優紀"],
+  ["結晶", "小笠原茉由,岸野里香,木下春奈,小谷里歩,篠原栞那,福本愛菜,山田菜々,山本彩,沖田彩華,村上文香,矢倉楓子,山岸奈津美"],
+  ["捕食者たちよ", "門脇佳奈子,近藤里奈,上西恵,白間美瑠,山口夕輝,渡辺美優紀,太田里織菜,川上礼奈,木下百花,城恵理子,肥川彩愛,與儀ケイラ"],
+  ["嘘の天秤", "小笠原茉由,上西恵,白間美瑠,福本愛菜,山田菜々,山本彩,城恵理子"],
+  ["なんでやねん、アイドル", "門脇佳奈子,木下春奈,大谷莉子,岡田梨紗子,小鷹狩佑香,小柳有沙,高野祐衣,瀧山あかね,谷川愛梨,原みづき,藤田留奈,村瀬紗英"],
+  ["努力の雫", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,篠原栞那,山田菜々,山本彩,小鷹狩佑香,城恵理子,山岸奈津美,與儀ケイラ,沖田彩華"],
+  ["右へ曲がれ!", "小谷里歩,近藤里奈,上西恵,白間美瑠,福本愛菜,山口夕輝,渡辺美優紀,木下百花,谷川愛梨,肥川彩愛,村上文香,矢倉楓子"],
+  ["恋愛のスピード", "小笠原茉由,上西恵,福本愛菜,山田菜々,山本彩,渡辺美優紀,城恵理子"],
+  ["最後のカタルシス", "岸野里香,木下春奈,小谷里歩,近藤里奈,篠原栞那,上西恵,福本愛菜,山本彩,城恵理子,村上文香,矢倉楓子,小鷹狩佑香"],
+  ["僕がもう少し大胆なら", "小笠原茉由,門脇佳奈子,白間美瑠,山口夕輝,山田菜々,吉田朱里,渡辺美優紀,木下百花,島田玲奈,谷川愛梨,肥川彩愛,與儀ケイラ"],
+  ["初恋の行方とプレイボール", "小笠原茉由,福本愛菜,山田菜々,山本彩,渡辺美優紀,城恵理子,谷川愛梨"],
+  ["僕らのレガッタ", "近藤里奈,上西恵,山田菜々,山本彩,島田玲奈,城恵理子,三田麻央,村瀬紗英,東由樹,久代梨奈,室加奈子,山本ひとみ"],
+  ["存在してないもの", "小笠原茉由,篠原栞那,福本愛菜,山口夕輝,吉田朱里,渡辺美優紀,沖田彩華,高野祐衣,山岸奈津美,赤澤萌乃,林萌々香,山内つばさ"],
+  ["砂浜でピストル", "小谷里歩,松田栞,肥川彩愛,村上文香,矢倉楓子,與儀ケイラ,加藤夕夏,薮下柊"],
+  ["星空のキャラバン", "小笠原茉由,近藤里奈,山本彩,吉田朱里,東由樹,沖田彩華,木下百花,高野祐衣,赤澤萌乃,山内つばさ,横山由依,林萌々香"],
+  ["恋愛被害届け", "木下春奈,福本愛菜,山口夕輝,山田菜々,渡辺美優紀,川上礼奈,島田玲奈,肥川彩愛,三田麻央,矢倉楓子,黒川葉月,室加奈子"],
+  ["冬将軍のリグレット", "矢倉楓子,山岸奈津美,山本ひとみ,與儀ケイラ,加藤夕夏,久代梨奈,薮下柊,松田栞"],
+  ["奥歯", "小笠原茉由,門脇佳奈子,岸野里香,木下春奈,山口夕輝,山本彩,東由樹,村上文香,山岸奈津美,山田菜々,上枝恵美加,日下このみ"],
+  ["野蛮なソフトクリーム", "古賀成美,近藤里奈,市川美織,渡辺美優紀,沖田彩華,川上礼奈,木下百花,三田麻央,矢倉楓子,黒川葉月,小林莉加子,室加奈子"],
+  ["ひな壇では僕の魅力は生きないんだ", "白間美瑠,西村愛華,村瀬紗英,與儀ケイラ,赤澤萌乃,太田夢莉,久代梨奈,渋谷凪咲"],
+  ["どしゃぶりの青春の中で", "岸野里香,木下春奈,西村愛華,山本彩,沖田彩華,村上文香,山岸奈津美,山田菜々,井尻晏菜,植田碧麗,上枝恵美加,中川紘美"],
+  ["思わせ光線", "近藤里奈,山口夕輝,渡辺美優紀,川上礼奈,木下百花,島田玲奈,三田麻央,矢倉楓子,太田夢莉,久代梨奈,大段舞依,山尾梨奈"],
+  ["もう裸足にはなれない", "村瀬紗英,赤澤萌乃,日下このみ,小林莉加子,室加奈子,川上千尋,渋谷凪咲,林萌々香"],
+  ["プロムの恋人", "門脇佳奈子,岸野里香,木下春奈,山本彩,沖田彩華,村上文香,山岸奈津美,矢倉楓子,石塚朱莉,井尻晏菜,上枝恵美加,大段舞依"],
+  ["水切り", "近藤里奈,山口夕輝,渡辺美優紀,川上礼奈,木下百花,三田麻央,山田菜々,與儀ケイラ,日下このみ,久代梨奈,三浦亜莉沙,山尾梨奈"],
+  ["山へ行こう", "白間美瑠,西村愛華,林萌々香,赤澤萌乃,太田夢莉,室加奈子,川上千尋,中野麗来"],
+  ["友達", "山本彩,山田菜々"],
+  ["アスファルトの涙", "明石奈津子,石田優美,鵜野みずき,大段舞依,城恵理子,照井穂乃佳,中野麗来,西澤瑠莉奈,松岡知穂,松村芽久未,森田彩花,山尾梨奈"],
+  ["ニーチェ先輩", "明石奈津子,城恵理子,須藤凜々花,山尾梨奈,中野麗来,植田碧麗,川上千尋,木下春奈"],
+  ["Must be now", "石田優美,加藤夕夏,岸野里香,西村愛華,山本彩,梅田彩佳,木下春奈,日下このみ,渡辺美優紀"],
+  ["どうでもいい人仮面", "明石奈津子,太田夢莉,西村愛華,植村梓,久代梨奈,植田碧麗,川上千尋,内木志,林萌々香"],
+  ["サヨナラ、踵を踏む人", "明石奈津子,山尾梨奈,植村梓,中野麗来,磯佳奈江,川上千尋,内木志"],
+  ["俺らとは", "岸野里香,小谷里歩,山口夕輝,山本彩,小笠原茉由"],
+  ["虹の作り方", "太田夢莉,須藤凜々花,内木志,薮下柊,渋谷凪咲"],
+  ["道頓堀よ、泣かせてくれ!", "太田夢莉,須藤凜々花,山本彩,矢倉楓子,白間美瑠,薮下柊,渡辺美優紀,渋谷凪咲"],
+  ["今ならば", "山本彩,渡辺美優紀"],
+  ["途中下車", "上西恵,須藤凜々花,林萌々香,川上礼奈,吉田朱里,梅山恋和,上西怜"],
+  ["恋は災難", "石田優美,磯佳奈江,鵜野みずき,大段舞依,加藤夕夏,上枝恵美加,川上千尋,川上礼奈,木下百花,中野麗来,西澤瑠莉奈,安田桃寧,吉田朱里,白間美瑠,渋谷凪咲"],
+  ["Let it snow!", "明石奈津子,石塚朱莉,井尻晏菜,植村梓,太田夢莉,沖田彩華,久代梨奈,城恵理子,武井紗良,藤江れいな,村瀬紗英,村中有基,森田彩花,矢倉楓子,山口夕輝"],
+  ["太陽が坂道を昇る頃", "安藤愛璃菜,岩田桃夏,梅山恋和,小嶋花梨,清水里香,上西怜,中川美音,西仲七海,本郷柚巴,水田詩織,溝川実来,山田寿々"],
+  ["自分の色", "東由樹,古賀成美,谷川愛梨,林萌々香,三田麻央,石田優美,鵜野みずき,西澤瑠莉奈,城恵理子,村瀬紗英,矢倉楓子"],
+  ["Which one", "吉田朱里,渋谷凪咲,植村梓,太田夢莉,村瀬紗英"],
+  ["阪急電車", "東由樹,市川美織,梅山恋和,日下このみ,古賀成美,小嶋花梨,谷川愛梨,内木志,林萌々香,堀詩音,本郷柚巴,三田麻央,山尾梨奈,山本彩加,山本彩"],
+  ["四字熟語ガールズ", "安藤愛璃菜,石田優美,磯佳奈江,岩田桃夏,鵜野みずき,大段舞依,加藤夕夏,川上千尋,川上礼奈,渋谷凪咲,白間美瑠,西澤瑠莉奈,安田桃寧,山田寿々,吉田朱里"],
+  ["Good Timing", "梅山恋和,山本彩加,岩田桃夏,山田寿々,上西怜"],
+  ["誤解", "白間美瑠,矢倉楓子"],
+  ["ロマンティックなサヨナラ", "内木志,三田麻央,山尾梨奈,石田優美,磯佳奈江,川上千尋,山田寿々,山本望叶"],
+  ["嘘つきマシーン", "東由樹,梅山恋和,日下このみ,古賀成美,小嶋花梨,谷川愛梨,内木志,林萌々香,堀詩音,本郷柚巴,三田麻央,山尾梨奈,山本彩加,山本彩"],
+  ["True Purpose", "石田優美,磯佳奈江,岩田桃夏,鵜野みずき,大段舞依,加藤夕夏,川上千尋,川上礼奈,渋谷凪咲,白間美瑠,西澤瑠莉奈,安田桃寧,山田寿々,吉田朱里"],
+  ["職務質問", "明石奈津子,石塚朱莉,井尻晏菜,植村梓,太田夢莉,久代梨奈,清水里香,城恵理子,上西怜,武井紗良,中川美音,水田詩織,村瀬紗英,森田彩花"],
+  ["甘い妄想", "太田夢莉,村瀬紗英,吉田朱里,渋谷凪咲"],
+  ["焼け木杭", "石田優美,磯佳奈江,太田夢莉,大段舞依,河野奈々帆,川上千尋,清水里香,武井紗良,谷川愛梨,西澤瑠莉奈,村瀬紗英,森田彩花,吉田朱里"],
+  ["嘘をつく理由", "明石奈津子,石塚朱莉,井尻晏菜,岩田桃夏,鵜野みずき,川上礼奈,久代梨奈,古賀成美,渋谷凪咲,白間美瑠,堀詩音,水田詩織,安田桃寧,山尾梨奈"],
+  ["アップデート", "東由樹,梅山恋和,加藤夕夏,小嶋花梨,塩月希依音,城恵理子,上西怜,内木志,中川美音,本郷柚巴,山田寿々,山本彩加,山本望叶"],
+  ["ピンク色の世界", "太田夢莉,村瀬紗英,吉田朱里,渋谷凪咲,白間美瑠,梅山恋和,上西怜,山本彩加"],
+  ["僕だけの君でいて欲しい", "太田夢莉,村瀬紗英,吉田朱里,渋谷凪咲"],
+  ["がっつきガールズ", "石田優美,太田夢莉,大段舞依,河野奈々帆,川上千尋,清水里香,武井紗良,谷川愛梨,西澤瑠莉奈,村瀬紗英,森田彩花,吉田朱里"],
+  ["パンパン パパパン", "明石奈津子,石塚朱莉,井尻晏菜,鵜野みずき,川上礼奈,久代梨奈,古賀成美,渋谷凪咲,白間美瑠,堀詩音,水田詩織,安田桃寧,山尾梨奈"],
+  ["ジュゴンはジュゴン", "東由樹,梅山恋和,加藤夕夏,小嶋花梨,塩月希依音,上西怜,中川美音,本郷柚巴,山田寿々,山本彩加,山本望叶"],
+  ["やさしさの稲妻", "石田優美,川上千尋,河野奈々帆,東由樹,加藤夕夏,小嶋花梨"],
+  ["全力グローイングアップ", "泉綾乃,新澤菜央,安部若菜,小林莉奈,貞野遥香,前田令子"],
+  ["ごめん 愛せないんだ", "石田優美,泉綾乃,太田夢莉,大田莉央奈,河野奈々帆,川上千尋,清水里香,谷川愛梨,西澤瑠莉奈,南羽諒,村瀬紗英,森田彩花,吉田朱里"],
+  ["真正面", "明石奈津子,石塚朱莉,井尻晏菜,鵜野みずき,古賀成美,渋谷凪咲,白間美瑠,堀詩音,堀ノ内百香,水田詩織,安田桃寧,山尾梨奈"],
+  ["無限大ノック", "東由樹,梅山恋和,加藤夕夏,小嶋花梨,塩月希依音,上西怜,新澤菜央,中川美音,本郷柚巴,山田寿々,山本彩加,山本望叶"],
+  ["涯", "石田優美,泉綾乃,川上千尋,河野奈々帆,坂本夏海,貞野遥香,清水里香,菖蒲まりん,南羽諒,村瀬紗英,森田彩花,山崎亜美瑠,吉田朱里,小林莉奈"],
+  ["青春はブラスバンド", "安部若菜,石塚朱莉,井尻晏菜,鵜野みずき,渋谷凪咲,白間美瑠,杉浦琴音,出口結菜,堀詩音,前田令子,水田詩織,安田桃寧,堀ノ内百香"],
+  ["好きになってごめんなさい", "梅山恋和,上西怜,山本彩加"],
+  ["ダンシングハイ", "石田優美,泉綾乃,川上千尋,河野奈々帆,坂本夏海,貞野遥香,清水里香,菖蒲まりん,南羽諒,村瀬紗英,山崎亜美瑠,吉田朱里"],
+  ["我が友よ 全力で走っているか？", "安部若菜,石塚朱莉,井尻晏菜,鵜野みずき,渋谷凪咲,白間美瑠,杉浦琴音,出口結菜,堀詩音,前田令子,水田詩織,安田桃寧"],
+  ["告白の空砲", "川上千尋,安部若菜,鵜野みずき,塩月希依音,山本望叶,横野すみれ,南波陽向"],
+  ["シダレヤナギ", "安部若菜,石田優美,石塚朱莉,梅山恋和,加藤夕夏,川上千尋,小嶋花梨,貞野遥香,塩月希依音,渋谷凪咲,上西怜,白間美瑠,原かれん,安田桃寧"],
+  ["青いレモンの季節", "泉綾乃,岡本怜奈,塩月希依音,南羽諒,浅尾桃香,黒田楓和,和田海佑"],
+  ["選ばれし者たち", "加藤夕夏,小嶋花梨,塩月希依音,渋谷凪咲,原かれん,本郷柚巴,佐月愛果,隅野和奏"],
+  ["恋と愛のその間には", "石田優美,加藤夕夏,小嶋花梨,貞野遥香,渋谷凪咲,新澤菜央,平山真衣,山本望叶,安部若菜,梅山恋和,川上千尋,塩月希依音,上西怜,原かれん,本郷柚巴"],
+  ["ジャンジャン", "泉綾乃,岡本怜奈,中川美音,南羽諒,鵜野みずき,出口結菜,中野美来,堀詩音,前田令子,水田詩織,山崎亜美瑠"],
+  ["夢中人", "石田優美,加藤夕夏,小嶋花梨,貞野遥香,渋谷凪咲,山本望叶,安部若菜,梅山恋和,川上千尋,塩月希依音,上西怜,原かれん,本郷柚巴"],
+  ["好きだ虫", "泉綾乃,加藤夕夏,小嶋花梨,貞野遥香,渋谷凪咲,新澤菜央,山本望叶,安部若菜,川上千尋,塩月希依音,上西怜,前田令子,瓶野神音,隅野和奏"],
+  ["挑発の青空", "石田優美,泉綾乃,岡本怜奈,加藤夕夏,小嶋花梨,坂田心咲,貞野遥香,渋谷凪咲,新澤菜央,平山真衣,山本望叶,和田海佑,中川美音,南羽諒"],
+  ["なぜ、僕は立ち上がるのか？", "安部若菜,李始燕,鵜野みずき,川上千尋,塩月希依音,上西怜,出口結菜,中野美来,原かれん,堀詩音,本郷柚巴,前田令子,眞鍋杏樹,水田詩織"],
+  ["Time bomb", "石田優美,平山真衣,和田海佑,出口結菜,原かれん,堀詩音,本郷柚巴,浅尾桃香,黒田楓和,早川夢菜"],
+  ["ジンクスとゲンカツギ", "石田優美,泉綾乃,瓶野神音,川上千尋,黒田楓和,小嶋花梨,佐月愛果,渋谷凪咲,田中雪乃,平山真衣,福野杏実,松岡さくら,松本海日菜"],
+  ["職員室に行くべきか？", "池帆乃香,鵜野みずき,貞野遥香,上西怜,隅野和奏,早川夢菜,原かれん,堀詩音,前田令子,松野美桜,眞鍋杏樹,山本望叶,和田海佑"],
+  ["恋のヘタレ", "浅尾桃香,安部若菜,黒島咲花,坂下真心,坂田心咲,坂本理紗,桜田彩叶,塩月希依音,新澤菜央,龍本弥生,出口結菜,水田詩織,芳野心咲,山本光"],
+  ["夏のDestination", "青原優花,石田優美,泉綾乃,瓶野神音,川上千尋,小嶋花梨,佐月愛果,田中雪乃,二瓶愛美,平山真衣,福野杏実,松岡さくら,松本海日菜"],
+  ["青春ジャンプ", "池帆乃香,鵜野みずき,上西怜,隅野和奏,芳賀礼,早川夢菜,原かれん,松野美桜,眞鍋杏樹,山本望叶,和田海佑"],
+  ["ヘドバンタイム", "青原和花,安部若菜,黒島咲花,坂下真心,坂田心咲,坂本理紗,桜田彩叶,塩月希依音,新澤菜央,龍本弥生,出口結菜,水田詩織,芳野心咲"],
+  ["青春テトラポット", "泉綾乃,川上千尋,上西怜,山本望叶"],
+  ["おとめのアイス", "泉綾乃,川上千尋,上西怜,山本望叶"],
+  ["風車", "石山千尋,内田愛彩,木根彩呂花,澁谷愛紗南,高橋ことね,竹田京加,田中ミリア,中川朋香,永田楓花,三鴨くるみ,宮崎紗衣,宮原心音,村井悠莉,山口美桜"],
+  ["Gotcha", "青原優花,池田典愛,泉綾乃,川上千尋,小嶋花梨,渋谷紗雪,田中雪乃,平山真衣,福野杏実,松岡さくら,松本海日菜,宮本杏海"],
+  ["あの船長を選んだのは俺たちじゃない", "池帆乃香,板垣心和,田中美空,西由真,西島梨央,西田帆花,芳賀礼,眞鍋杏樹,山本望叶,吉見純音,和田海佑"],
+  ["もっと永遠に", "青原和花,安部若菜,衣笠彩実,黒島咲花,坂下真心,坂田心咲,坂本理紗,桜田彩叶,塩月希依音,新澤菜央,龍本弥生,舟橋礼菜,水田詩織,芳野心咲"],
+  ["やねん", "安部若菜,泉綾乃,板垣心和,坂田心咲,塩月希依音,竹田京加,宮本杏海"],
+  ["カワイイは世界を救う", "桜田彩叶,新澤菜央,龍本弥生,芳賀礼"],
+  ["卵の女王様", "岡腰星来,赤松昊,桜井ひまり,善家侑莉花,高橋樹奈,田中れい,谷口詩乃,西住美咲妃,福原琴美,藪内陽花,和田承子"],
+  ["\"生徒手帳の写真は気に入っていない\"の法則", "上西恵,吉田朱里,山本彩,小谷里歩,木下百花,近藤里奈,白間美瑠,村上文香,矢倉楓子,山田菜々,門脇佳奈子,木下春奈,薮下柊,渋谷凪咲,渡辺美優紀,小笠原茉由"],
+  ["with my soul", "東由樹,沖田彩華,川上礼奈,木下百花,小柳有沙,島田玲奈,高野祐衣,谷川愛梨,三田麻央,村上文香,村瀬紗英,矢倉楓子,山岸奈津美,山本ひとみ,與儀ケイラ"],
+  ["なめくじハート", "近藤里奈,白間美瑠,渡辺美優紀,矢倉楓子,與儀ケイラ,太田夢莉,久代梨奈,薮下柊,西村愛華"],
+  ["太宰治を読んだか？", "山田菜々,山本彩,横山由依"],
+  ["ピーク", "太田夢莉,加藤夕夏,白間美瑠,藤江れいな,村瀬紗英,矢倉楓子,山田菜々,市川美織,梅田彩佳,薮下柊,渋谷凪咲,高柳明音,城恵理子"],
+  ["ハートの独占権", "柏木由紀,渡辺美優紀"],
+  ["想像の詩人", "明石奈津子,石田優美,鵜野みずき,大段舞依,城恵理子,照井穂乃佳,中野麗来,西澤瑠莉奈,松岡知穂,松村芽久未,森田彩花,山尾梨奈,高山梨子"],
+  ["サササ サイコー!", "山本彩加,岩田桃夏,梅山恋和,上西怜,溝川実来,山田寿々"],
+  ["Enjoy無礼講!", "小嶋花梨,坂田心咲,新澤菜央,山本望叶,原かれん,佐月愛果,桜田彩叶"],
+  ["今さら道頓堀", "石田優美,貞野遥香,渋谷凪咲,平山真衣,安部若菜,川上千尋,塩月希依音,上西怜,坂下真心,田中雪乃,青原優花"],
+];
+// 同じメンバーの曲をまとめる（メンバーの組み合わせ → 曲名リスト）
+const SONG_GROUPS = (() => {
+  const map = new Map();
+  SONGS.forEach(([t, m]) => {
+    const names = m.split(',');
+    const key = [...names].sort().join(',');
+    if (!map.has(key)) map.set(key, { names, titles: [] });
+    const g = map.get(key);
+    if (!g.titles.includes(t)) g.titles.push(t);
+  });
+  return [...map.values()];
+})();
+const pickRandom = arr => arr[Math.floor(Math.random() * arr.length)];
+
 const SECRETS = [
+  // 結果の全員が、ある曲の歌唱メンバーとピッタリ同じ（順番は自由・同じメンバーの曲はランダム）
+  { type: 'songExact' },
   // 卒業生メンバーの組み合わせ（全員卒業生メッセージより優先）
   { type: 'set', members: ['白間美瑠', '上西恵', '小笠原茉由', '山本彩', '渡辺美優紀', '吉田朱里', '市川美織'], msg: '諦めなければ必ずチャンスはある' },
   { type: 'set', members: ['太田夢莉', '薮下柊', '渋谷凪咲', '須藤凜々花', '内木志'], msg: 'ほら君にかかる 虹になる🌈' },
@@ -543,7 +717,9 @@ const SECRETS = [
   { type: 'set', members: ['和田海佑', '浅尾桃香', '瓶野神音'], msg: 'もみじ🍁' },
   { type: 'set', members: ['谷口詩乃', '田中れい', '桜井ひまり'], msg: 'おきらくトリオ！！！', file: 'okiraku.mp4' },
   { type: 'set', members: ['山本望叶', '横野すみれ', '南波陽向'], msg: 'にゃんすーちょ' },
+  { type: 'set', members: ['山本彩加', '上西怜', '梅山恋和'], msg: 'LAPIS ARCH！' },
   { type: 'set', members: ['桜田彩叶', '龍本弥生'], msg: 'あやよん📻' },
+  { type: 'set', members: ['山本彩', '渡辺美優紀'], msg: 'さやみるきー！' },
   { type: 'set', members: ['眞鍋杏樹', '平山真衣'], msg: 'じゅってぃーは難波の宝' },
   { type: 'set', members: ['松本海日菜', '坂本理紗'], msg: 'りさっひー💛🩵' },
   { type: 'set', members: ['宮本杏海', '衣笠彩実'], msg: 'あやあみ👶' },
@@ -553,14 +729,17 @@ const SECRETS = [
   { type: 'set', members: ['善家侑莉花', '高橋樹奈'], msg: 'ぜんじゅなー！' },
   { type: 'set', members: ['渋谷凪咲', '薮下柊'], msg: 'なぎっしゅーやね！' },
   { type: 'set', members: ['高橋ことね', '三鴨くるみ'], msg: 'かものはし' },
+  // ある曲の歌唱メンバー（2人以上）が全員結果に入ってる（いちばん人数の多い曲から・同じ人数ならランダム）
+  { type: 'songSub' },
   { type: 'center', member: '菖蒲まりん', msg: '海じゃないよ アクアだよ' },
   { type: 'solo',    msg: '7人ぜんぶ{name}！？ 愛やね' },
   { type: 'center',  member: '塩月希依音', msg: '我らがキャプテン！' },
   { type: 'sameGen', msg: '全員{gen}！ {gen}箱推し界隈' },
 ];
 
-const MIN_PRELIM = 7;   // 神7を作るのに必要な最低人数
-const TOP_N = 7;        // 上位何人まで決めるか
+let TOP_N = 7;          // 上位何人まで決めるか（神7=7 / 選抜=16）
+let MIN_PRELIM = 7;     // ソートするのに必要な最低人数（= TOP_N）
+const sizeName = () => TOP_N === 7 ? '神7' : '選抜' + TOP_N;
 const PAGE_SIZE = 4;
 
 /* =========================================================
@@ -1011,12 +1190,10 @@ function switchMode(newMode, initial = false) {
     window.history.replaceState(null, '', url);
   } catch (e) {}
 
-  document.querySelectorAll('.mode-tab').forEach(t =>
+  document.querySelectorAll('.mode-tab[data-mode]').forEach(t =>
     t.classList.toggle('active', t.dataset.mode === mode));
 
-  const label = MODES[mode].label;
-  document.getElementById('main-title').textContent = `NMB48 ${label} 神7 好き顔ソート`;
-  document.title = `NMB48 ${label} 神7 好き顔ソート`;
+  updateTitle();
   document.getElementById('phase1-title').textContent = pickMode ? '【自分で並べる】好きな子を選んでな' : '【予選】好きな顔、選んでな';
 
   shuffledMembers = shuffle(MODES[mode].members);
@@ -1170,14 +1347,31 @@ function syncBottomSpace() {
 }
 window.addEventListener('resize', syncBottomSpace);
 
+function updateTitle() {
+  const t = `NMB48 ${MODES[mode].label} ${sizeName()} 好き顔ソート`;
+  document.getElementById('main-title').textContent = t;
+  document.title = t;
+}
+
+// 神7 / 選抜16 の切り替え
+function setSize(n) {
+  TOP_N = n;
+  MIN_PRELIM = n;
+  picks = picks.slice(0, n);
+  document.querySelectorAll('[data-sz]').forEach(b => b.classList.toggle('active', Number(b.dataset.sz) === n));
+  updateTitle();
+  setPickMode(pickMode);
+}
+
 function updateSelectionBar() {
   requestAnimationFrame(syncBottomSpace);
   const slots = document.getElementById('pick-slots');
   slots.classList.toggle('hidden', !pickMode);
-  document.querySelector('.sel-info').firstChild.textContent = pickMode ? '神7 ' : '選択中 ';
+  document.querySelector('.sel-info').firstChild.textContent = pickMode ? sizeName() + ' ' : '選択中 ';
+  slots.classList.toggle('many', TOP_N > 7);
   if (pickMode) {
     slots.innerHTML = '';
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < TOP_N; i++) {
       const m = picks[i];
       const s = document.createElement('div');
       s.className = 'pick-slot' + (m ? ' filled' : '') + (i === 0 ? ' first' : '');
@@ -1189,10 +1383,10 @@ function updateSelectionBar() {
     document.getElementById('sel-count').textContent = n;
     document.getElementById('clear-btn').disabled = n === 0;
     const btn = document.getElementById('to-sort-btn');
-    btn.textContent = 'この神7で決定';
-    btn.disabled = n < 7;
+    btn.textContent = `この${sizeName()}で決定`;
+    btn.disabled = n < TOP_N;
     document.getElementById('sel-hint').textContent =
-      n < 7 ? `あと${7 - n}枠。写真をタップした順に1位から入るで` : '枠をタップすると外せるで';
+      n < TOP_N ? `あと${TOP_N - n}枠。写真をタップした順に1位から入るで` : '枠をタップすると外せるで';
     return;
   }
   document.getElementById('to-sort-btn').textContent = 'ソート開始';
@@ -1218,7 +1412,7 @@ function nextGroup() {
   if (pickMode) { changePage(-currentPage); return; }
   // 最後まで見終わった
   if (prelimSelected.length >= MIN_PRELIM) startSort();
-  else showToast(`神7作るんやから、最低${MIN_PRELIM}人は選んでや（今${prelimSelected.length}人）`);
+  else showToast(`${sizeName()}作るんやから、最低${MIN_PRELIM}人は選んでや（今${prelimSelected.length}人）`);
 }
 
 /* ---------- 自分で並べるモード ---------- */
@@ -1228,16 +1422,16 @@ function setPickMode(on) {
     b.classList.toggle('active', (b.dataset.pm === 'pick') === on));
   document.getElementById('phase1-title').textContent = on ? '【自分で並べる】好きな子を選んでな' : '【予選】好きな顔、選んでな';
   document.getElementById('phase1-desc').innerHTML = on
-    ? '写真をタップした順に1位→7位の枠に入るで。<br>同じ子を何回タップしてもOK！推し一色の神7もいけるで'
+    ? `写真をタップした順に1位→${TOP_N}位の枠に入るで。<br>同じ子を何回タップしてもOK！推し一色の${sizeName()}もいけるで`
     : '「好きやわ〜」って思う子、何人選んでもええで！<br>1人も選ばんと次行ってもかまへんよ';
   onFilterChange();
 }
 
 function addPick(m) {
-  if (picks.length >= 7) { showToast('7枠埋まったで。下の枠をタップすると外せるで'); return; }
+  if (picks.length >= TOP_N) { showToast(`${TOP_N}枠埋まったで。下の枠をタップすると外せるで`); return; }
   picks.push(m);
   refreshPickMarks();
-  if (picks.length === 7) showToast('神7そろったで！「この神7で決定」を押してな');
+  if (picks.length === TOP_N) showToast(`${sizeName()}そろったで！「この${sizeName()}で決定」を押してな`);
 }
 
 function removePick(i) {
@@ -1273,9 +1467,9 @@ function showPhase(n) {
 
 function startSort() {
   if (pickMode) {
-    if (picks.length < 7) return;
-    finalKami7 = picks.slice(0, 7);
-    finalRanks = [1, 2, 3, 4, 5, 6, 7];
+    if (picks.length < TOP_N) return;
+    finalKami7 = picks.slice(0, TOP_N);
+    finalRanks = finalKami7.map((m, i) => i + 1);
     showResult(false);
     return;
   }
@@ -1365,7 +1559,7 @@ function undo() {
    ========================================================= */
 function showRanking() {
   const sorted = sortQueues[0] || [];
-  finalKami7 = sorted.slice(0, 7);
+  finalKami7 = sorted.slice(0, TOP_N);
   // 引き分けにした2人が隣同士なら同じ順位（例：1位,2位,2位,4位…）
   const tied = (x, y) => ties.includes(x.id + '|' + y.id) || ties.includes(y.id + '|' + x.id);
   finalRanks = finalKami7.map((m, i) => i + 1);
@@ -1382,14 +1576,28 @@ function findSecret(list) {
   for (const s of SECRETS) {
     let ok = false, vars = { name: names[0], gen: list[0] && list[0].gen };
     switch (s.type) {
-      case 'solo':    ok = names.length === 7 && names.every(n => n === names[0]); break;
+      case 'solo':    ok = names.length >= 7 && names.every(n => n === names[0]); break;
       case 'center':  ok = names[0] === s.member; break;
       case 'exact':   ok = (s.members || []).length === 7 && s.members.every((n, i) => names[i] === n); break;
+      case 'songExact': {
+        const uniq = [...new Set(names)];
+        const hits = SONG_GROUPS.filter(g => g.names.length === uniq.length && uniq.length === names.length && g.names.every(n => uniq.includes(n)));
+        if (hits.length) return { msg: pickRandom(hits.flatMap(g => g.titles)) + '好きなん？' };
+        break;
+      }
+      case 'songSub': {
+        const hits = SONG_GROUPS.filter(g => g.names.length >= 2 && g.names.length < names.length && g.names.every(n => names.includes(n)));
+        if (hits.length) {
+          const max = Math.max(...hits.map(g => g.names.length));
+          return { msg: pickRandom(hits.filter(g => g.names.length === max).flatMap(g => g.titles)) + '好きなん？' };
+        }
+        break;
+      }
       case 'set':     ok = (s.members || []).length > 0 && s.members.every(n => names.includes(n)); break;
-      case 'allGen':  ok = list.length === 7 && list.every(m => (s.gens || [s.gen]).includes(m.gen))
+      case 'allGen':  ok = list.length >= 7 && list.every(m => (s.gens || [s.gen]).includes(m.gen))
                      && (!s.needAll || s.gens.every(g => list.some(m => m.gen === g))); vars.gen = s.gen || list[0].gen; break;
-      case 'sameGen': ok = list.length === 7 && list.every(m => m.gen === list[0].gen); break;
-      case 'allGrad': ok = list.length === 7 && list.every(m => !m.current); break;
+      case 'sameGen': ok = list.length >= 7 && list.every(m => m.gen === list[0].gen); break;
+      case 'allGrad': ok = list.length >= 7 && list.every(m => !m.current); break;
     }
     if (ok) return { msg: fill(s.msg, vars), video: s.video, file: s.file };
   }
@@ -1430,6 +1638,7 @@ function showSecret(list) {
 function showResult(send) {
   showPhase(3);
   window.scrollTo({ top: 0 });
+  document.getElementById('result-title').textContent = `あんたの${sizeName()}、できたで！`;
   if (send) sendResult(finalKami7);
   showSecret(finalKami7);
   resultBlob = null;
@@ -1451,7 +1660,7 @@ function statsReady() {
 }
 
 function sendResult(list) {
-  if (!statsReady() || list.length < 7) return;
+  if (!statsReady() || TOP_N !== 7 || list.length < 7) return;
   try {
     const body = new URLSearchParams();
     body.append(STATS.entryMode, MODES[mode].label);
@@ -1610,7 +1819,13 @@ function fitText(ctx, text, maxW, size, weight) {
 const FONT = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif';
 
 async function drawResultImage(list) {
-  const W = 1080, H = 1110;
+  const big = list.length > 7;
+  // 並び：各段の [順位index…] とカード幅・段のy座標（1段目は 2位・1位・3位）
+  const rows = big
+    ? [{ idx: [1, 0, 2], cw: 300, y: 280 }, { idx: [3, 4, 5, 6], cw: 222, y: 690 },
+       { idx: [7, 8, 9, 10], cw: 222, y: 992 }, { idx: [11, 12, 13, 14, 15], cw: 180, y: 1294 }]
+    : [{ idx: [1, 0, 2], cw: 300, y: 280 }, { idx: [3, 4, 5, 6], cw: 222, y: 720 }];
+  const W = 1080, H = big ? 1640 : 1110;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -1627,30 +1842,27 @@ async function drawResultImage(list) {
   ctx.font = `bold 50px ${FONT}`;
   ctx.fillText('あなたの', W / 2, 118);
   ctx.fillStyle = '#f07800';
-  fitText(ctx, `NMB48 ${MODES[mode].label} 好き顔神7`, W - 160, 64, 'bold');
-  ctx.fillText(`NMB48 ${MODES[mode].label} 好き顔神7`, W / 2, 196);
+  const ttl = `NMB48 ${MODES[mode].label} 好き顔${big ? '選抜' : '神7'}`;
+  fitText(ctx, ttl, W - 160, 64, 'bold');
+  ctx.fillText(ttl, W / 2, 196);
   ctx.fillStyle = '#999';
   ctx.font = `28px ${FONT}`;
-  ctx.fillText('あなたの「顔が好き」TOP7', W / 2, 246);
+  ctx.fillText(`あなたの「顔が好き」TOP${list.length}`, W / 2, 246);
 
-  // 上の段：2位・1位・3位 / 下の段：4〜7位
-  const top = [[1, 0], [0, 1], [2, 2]];      // [順位index, 列]
-  const cw1 = 300, gap1 = 24, x1 = (W - cw1 * 3 - gap1 * 2) / 2, y1 = 280;
-  top.forEach(([ri, col]) => {
-    if (list[ri]) drawCard(ctx, list[ri], photos[ri], finalRanks[ri] || ri + 1, x1 + col * (cw1 + gap1), y1, cw1, ri === 0);
+  rows.forEach(r => {
+    const gap = r.idx.length === 3 ? 24 : 18;
+    const x0 = (W - r.cw * r.idx.length - gap * (r.idx.length - 1)) / 2;
+    r.idx.forEach((ri, col) => {
+      if (list[ri]) drawCard(ctx, list[ri], photos[ri], finalRanks[ri] || ri + 1, x0 + col * (r.cw + gap), r.y, r.cw, ri === 0);
+    });
   });
-  const cw2 = 222, gap2 = 18, x2 = (W - cw2 * 4 - gap2 * 3) / 2, y2 = 720;
-  for (let k = 0; k < 4; k++) {
-    const ri = 3 + k;
-    if (list[ri]) drawCard(ctx, list[ri], photos[ri], finalRanks[ri] || ri + 1, x2 + k * (cw2 + gap2), y2, cw2, false);
-  }
 
   // フッター
   ctx.textAlign = 'center';
   ctx.fillStyle = '#bbb';
   ctx.font = `26px ${FONT}`;
   const u = pageUrl();
-  ctx.fillText(u ? u.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '#NMB48好き顔神7', W / 2, H - 70);
+  ctx.fillText(u ? u.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : (big ? '#NMB48好き顔選抜' : '#NMB48好き顔神7'), W / 2, H - 70);
   return c;
 }
 
@@ -1708,8 +1920,13 @@ function drawCard(ctx, m, photo, rank, x, y, w, isTop) {
 /* ---------- 保存・投稿 ---------- */
 function shareText() {
   const label = MODES[mode].label;
-  const lines = finalKami7.map((m, i) => `${finalRanks[i] || i + 1}位 ${m.name}`);
   const u = pageUrl();
+  if (finalKami7.length > 7) {
+    // 16人全部書くとXの文字数を超えるので、文章は1〜7位まで
+    const lines = finalKami7.slice(0, 7).map((m, i) => `${finalRanks[i] || i + 1}位 ${m.name}`);
+    return `うちのNMB48 ${label}好き顔選抜${finalKami7.length}\n\n${lines.join('\n')}\n\n#NMB48好き顔選抜 ${MODES[mode].tag}` + (u ? `\n${u}` : '');
+  }
+  const lines = finalKami7.map((m, i) => `${finalRanks[i] || i + 1}位 ${m.name}`);
   return `うちのNMB48 ${label}好き顔神7\n\n${lines.join('\n')}\n\n#NMB48好き顔神7 ${MODES[mode].tag}` + (u ? `\n${u}` : '');
 }
 
