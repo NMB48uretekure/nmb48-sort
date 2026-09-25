@@ -1242,7 +1242,10 @@ function removePick(i) {
 function changePage(d) {
   currentPage += d;
   renderPrelimPage();
-  document.getElementById('phase1').scrollIntoView({ behavior: 'smooth' });
+  // 新しい4人の先頭（ページ番号）が画面のいちばん上に来るよう、一瞬で移動
+  // （スムーズスクロールはiPhoneだと途中で止まって中途半端な位置になるため使わない）
+  const top = document.getElementById('page-counter').getBoundingClientRect().top + window.scrollY - 8;
+  window.scrollTo(0, Math.max(0, top));
 }
 
 function clearSelection() {
