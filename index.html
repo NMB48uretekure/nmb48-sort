@@ -363,6 +363,8 @@
   .secret-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   .secret-msg small { display: block; font-size: 10px; color: #b58400; letter-spacing: 2px; margin-bottom: 2px; }
   @keyframes secretPop { 0% { transform: scale(.7); opacity: 0; } 70% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
+  .secret-clip { margin-top: 10px; }
+  .secret-clip video { width: 100%; display: block; border-radius: 10px; background: #000; }
   .hidden { display: none !important; }
   #toast {
     position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
@@ -539,7 +541,7 @@ const SECRETS = [
   { type: 'set', members: ['桜田彩叶', '龍本弥生', '新澤菜央'], msg: 'カワイイは世界を救う' },
   { type: 'set', members: ['池帆乃香', '福野杏実', '桜田彩叶'], msg: 'あやほのあみやね〜' },
   { type: 'set', members: ['和田海佑', '浅尾桃香', '瓶野神音'], msg: 'もみじ🍁' },
-  { type: 'set', members: ['谷口詩乃', '田中れい', '桜井ひまり'], msg: 'おきらくトリオ！！！' },
+  { type: 'set', members: ['谷口詩乃', '田中れい', '桜井ひまり'], msg: 'おきらくトリオ！！！', file: 'okiraku.mp4' },
   { type: 'set', members: ['山本望叶', '横野すみれ', '南波陽向'], msg: 'にゃんすーちょ' },
   { type: 'set', members: ['桜田彩叶', '龍本弥生'], msg: 'あやよん📻' },
   { type: 'set', members: ['眞鍋杏樹', '平山真衣'], msg: 'じゅってぃーは難波の宝' },
@@ -1389,7 +1391,7 @@ function findSecret(list) {
       case 'sameGen': ok = list.length === 7 && list.every(m => m.gen === list[0].gen); break;
       case 'allGrad': ok = list.length === 7 && list.every(m => !m.current); break;
     }
-    if (ok) return { msg: fill(s.msg, vars), video: s.video };
+    if (ok) return { msg: fill(s.msg, vars), video: s.video, file: s.file };
   }
   return null;
 }
@@ -1407,6 +1409,19 @@ function showSecret(list) {
       wrap.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(hit.video)}?rel=0&playsinline=1"
         title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen loading="lazy"></iframe>`;
+      box.appendChild(wrap);
+    }
+    if (hit.file) {
+      // サイトと同じ場所に置いた動画ファイル（例：okiraku.mp4）を再生
+      const wrap = document.createElement('div');
+      wrap.className = 'secret-clip';
+      const v = document.createElement('video');
+      v.src = hit.file;
+      v.controls = true;
+      v.playsInline = true;
+      v.preload = 'metadata';
+      v.onerror = () => wrap.remove();   // 動画が見つからんかったら枠ごと消す
+      wrap.appendChild(v);
       box.appendChild(wrap);
     }
   }
