@@ -178,6 +178,7 @@
   .battle-card .name { font-size: 14px; font-weight: bold; margin-top: 8px; }
   .battle-card .gen { font-size: 11px; color: #999; }
   .vs-text { font-size: 18px; font-weight: bold; color: var(--main); }
+  .draw-btn { margin: 4px auto 12px; font-size: 15px; }
 
   /* ─── 結果画面 ─── */
   #capture-area {
@@ -444,6 +445,7 @@
       <div class="gen" id="fighter1-gen"></div>
     </div>
   </div>
+  <button class="btn-wide btn-light draw-btn" onclick="selectWinner(2)">どっちも同じくらい好き（引き分け）</button>
   <button id="undo-btn" class="btn-secondary btn-small" onclick="undo()" disabled>ひとつ戻る</button>
 </div>
 
@@ -950,6 +952,8 @@ let prelimSelected = [];
 let currentPage = 0;
 let filtered = [];
 let shuffledMembers = [];
+let ties = [];          // 引き分けにした2人のid（'a|b'）
+let finalRanks = [1, 2, 3, 4, 5, 6, 7];
 let pickMode = false;   // true = 自分で並べる（同じ人も何回でもOK）
 let picks = [];
 let selectedGens = new Set();   // 絞り込み中の期生（空=該当なし）
@@ -1269,6 +1273,7 @@ function startSort() {
   if (pickMode) {
     if (picks.length < 7) return;
     finalKami7 = picks.slice(0, 7);
+    finalRanks = [1, 2, 3, 4, 5, 6, 7];
     showResult(false);
     return;
   }
@@ -1281,6 +1286,7 @@ function startSort() {
   parentQueue = [];
   undoStack = [];
   battleCount = 0;
+  ties = [];
   nextMergeStep();
 }
 
@@ -1327,9 +1333,16 @@ function renderBattle(a, b) {
 
 function selectWinner(choice) {
   // 「ひとつ戻る」用に状態を保存
-  undoStack.push(JSON.stringify({ sortQueues, parentQueue, battleCount }));
+  undoStack.push(JSON.stringify({ sortQueues, parentQueue, battleCount, ties }));
   const p = parentQueue[0];
-  p.merged.push(choice === 0 ? p.left.shift() : p.right.shift());
+  if (choice === 2) {
+    // 引き分け：2人とも並べて入れて、同じ順位扱いにする
+    const a = p.left.shift(), b = p.right.shift();
+    ties.push(a.id + '|' + b.id);
+    p.merged.push(a, b);
+  } else {
+    p.merged.push(choice === 0 ? p.left.shift() : p.right.shift());
+  }
   battleCount++;
   processNextPair();
 }
@@ -1340,6 +1353,7 @@ function undo() {
   sortQueues = s.sortQueues;
   parentQueue = s.parentQueue;
   battleCount = s.battleCount;
+  ties = s.ties || [];
   showPhase(2);
   processNextPair();
 }
@@ -1350,6 +1364,12 @@ function undo() {
 function showRanking() {
   const sorted = sortQueues[0] || [];
   finalKami7 = sorted.slice(0, 7);
+  // 引き分けにした2人が隣同士なら同じ順位（例：1位,2位,2位,4位…）
+  const tied = (x, y) => ties.includes(x.id + '|' + y.id) || ties.includes(y.id + '|' + x.id);
+  finalRanks = finalKami7.map((m, i) => i + 1);
+  for (let i = 1; i < finalKami7.length; i++) {
+    if (tied(finalKami7[i - 1], finalKami7[i])) finalRanks[i] = finalRanks[i - 1];
+  }
   showResult(true);
 }
 
@@ -1602,12 +1622,12 @@ async function drawResultImage(list) {
   const top = [[1, 0], [0, 1], [2, 2]];      // [順位index, 列]
   const cw1 = 300, gap1 = 24, x1 = (W - cw1 * 3 - gap1 * 2) / 2, y1 = 280;
   top.forEach(([ri, col]) => {
-    if (list[ri]) drawCard(ctx, list[ri], photos[ri], ri + 1, x1 + col * (cw1 + gap1), y1, cw1, ri === 0);
+    if (list[ri]) drawCard(ctx, list[ri], photos[ri], finalRanks[ri] || ri + 1, x1 + col * (cw1 + gap1), y1, cw1, ri === 0);
   });
   const cw2 = 222, gap2 = 18, x2 = (W - cw2 * 4 - gap2 * 3) / 2, y2 = 720;
   for (let k = 0; k < 4; k++) {
     const ri = 3 + k;
-    if (list[ri]) drawCard(ctx, list[ri], photos[ri], ri + 1, x2 + k * (cw2 + gap2), y2, cw2, false);
+    if (list[ri]) drawCard(ctx, list[ri], photos[ri], finalRanks[ri] || ri + 1, x2 + k * (cw2 + gap2), y2, cw2, false);
   }
 
   // フッター
@@ -1654,7 +1674,7 @@ function drawCard(ctx, m, photo, rank, x, y, w, isTop) {
   const bh = Math.round(w * 0.13), label = `${rank}位`;
   ctx.font = `bold ${Math.round(bh * 0.6)}px ${FONT}`;
   const bw = ctx.measureText(label).width + bh * 0.9;
-  ctx.fillStyle = isTop ? '#e6b422' : '#f07800';
+  ctx.fillStyle = rank === 1 ? '#e6b422' : '#f07800';
   roundRect(ctx, x + pad * 2.2, y + pad * 2.2, bw, bh, bh / 2); ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1673,7 +1693,7 @@ function drawCard(ctx, m, photo, rank, x, y, w, isTop) {
 /* ---------- 保存・投稿 ---------- */
 function shareText() {
   const label = MODES[mode].label;
-  const lines = finalKami7.map((m, i) => `${i + 1}位 ${m.name}`);
+  const lines = finalKami7.map((m, i) => `${finalRanks[i] || i + 1}位 ${m.name}`);
   const u = pageUrl();
   return `うちのNMB48 ${label}好き顔神7\n\n${lines.join('\n')}\n\n#NMB48好き顔神7 ${MODES[mode].tag}` + (u ? `\n${u}` : '');
 }
