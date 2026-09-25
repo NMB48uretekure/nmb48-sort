@@ -487,6 +487,7 @@
     <button class="mode-tab active" data-am="all" onclick="setAdminMode('all')">ぜんぶ</button>
     <button class="mode-tab" data-am="現役" onclick="setAdminMode('現役')">現役</button>
     <button class="mode-tab" data-am="歴代" onclick="setAdminMode('歴代')">歴代</button>
+    <button class="mode-tab" data-am="楽曲" onclick="setAdminMode('楽曲')">楽曲</button>
   </div>
   <div class="mode-tabs admin-tabs">
     <button class="mode-tab active" data-ak="first" onclick="setAdminKind('first')">1位の回数</button>
@@ -1727,11 +1728,13 @@ function setAdminKind(k) {
 }
 
 function renderAdmin() {
-  const rows = adminRows.filter(r => adminMode === 'all' || r.mode === adminMode);
+  // 「ぜんぶ」はメンバー（現役＋歴代）だけ。楽曲ソートの結果は「楽曲」タブで見る
+  const song = adminMode === '楽曲';
+  const rows = adminRows.filter(r => adminMode === 'all' ? r.mode !== '楽曲' : r.mode === adminMode);
   document.getElementById('admin-total').textContent = `集計した結果：${rows.length}件`;
   document.getElementById('admin-help').textContent = {
-    first: '1位（センター）に選ばれた回数',
-    in: '神7（1〜7位）に入った回数',
+    first: song ? '1位に選ばれた回数' : '1位（センター）に選ばれた回数',
+    in: song ? 'TOP7（1〜7位）に入った回数' : '神7（1〜7位）に入った回数',
     point: '1位=7点、2位=6点 … 7位=1点で合計',
   }[adminKind];
   const score = {};
@@ -1748,11 +1751,12 @@ function renderAdmin() {
   let rank = 0, prev = null;
   list.forEach(([name, v], i) => {
     if (v !== prev) { rank = i + 1; prev = v; }
-    const m = ALL_MEMBERS.find(x => x.name === name) || { name, gen: '', img: '' };
+    const m = (!song && ALL_MEMBERS.find(x => x.name === name)) || { name, gen: '', img: '' };
+    const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const row = document.createElement('div');
     row.className = 'admin-row';
-    row.innerHTML = `<div class="rk">${rank}</div>${imgTag(m)}
-      <div class="nm">${name}<small>${m.gen}${m.current ? '・現役' : ''}</small>
+    row.innerHTML = `<div class="rk">${rank}</div>${song ? '' : imgTag(m)}
+      <div class="nm">${esc(name)}<small>${m.gen}${m.current ? '・現役' : ''}</small>
         <div class="admin-bar" style="width:${Math.max(4, v / max * 100)}%"></div></div>
       <div class="ct">${v}<small>${unit}</small></div>`;
     box.appendChild(row);
